@@ -1,0 +1,25 @@
+flowchart TB
+    INET((Internet)) --- RTR
+
+    subgraph HOME["Home LAN 192.168.1.0/24"]
+        RTR["Home router<br/>192.168.1.1<br/>static route 10.10.0.0/16 via .250"]
+        WS["Workstations<br/>Wi-Fi / wired, DHCP"]
+        RTR --- WS
+    end
+
+    RTR ---|"Gi1/0/1 routed<br/>192.168.1.250"| CORE
+
+    subgraph LAB["Lab 10.10.0.0/16 (routed by CORE-SW1)"]
+        CORE["CORE-SW1<br/>Cisco 3750-X (L3)<br/>SVIs 10.10.10.1 / 20.1 / 30.1"]
+        SW1["ACCESS-SW1<br/>Cisco 2960-X<br/>10.10.10.11"]
+        SW2["ACCESS-SW2<br/>Cisco 2960-X<br/>10.10.10.12"]
+        NAS["NAS-01<br/>WD MyCloud EX2 Ultra<br/>10.10.30.10"]
+        ESXI["ESXI-01<br/>Supermicro X10SRW-F, ESXi 8<br/>vmk0 10.10.10.21<br/>vCenter 10.10.10.22"]
+
+        CORE ===|"Po1 LACP trunk<br/>Gi1/0/21-22 to Gi1/0/23-24"| SW1
+        CORE ===|"Po2 LACP trunk<br/>Gi1/0/23-24 to Gi1/0/23-24"| SW2
+        CORE ---|"Gi1/0/2 access VLAN 30"| NAS
+        SW1 ---|"Gi1/0/1 trunk, vmnic0"| ESXI
+        SW2 ---|"Gi1/0/1 trunk, vmnic1"| ESXI
+        SW2 -.-|"Gi1/0/2 VLAN 10, IPMI 10.10.10.30"| ESXI
+    end

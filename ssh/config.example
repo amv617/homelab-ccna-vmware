@@ -1,0 +1,25 @@
+# OpenSSH client config for the lab switches.
+# Copy the blocks you need into ~/.ssh/config (chmod 600 on macOS/Linux).
+# IOS offers an older ssh-rsa host key that current OpenSSH refuses by
+# default; these options re-enable it for these hosts only.
+
+Host core-sw1
+    HostName 192.168.1.250
+    User admin
+    HostKeyAlgorithms +ssh-rsa
+    PubkeyAcceptedAlgorithms +ssh-rsa
+    KexAlgorithms +diffie-hellman-group14-sha1
+
+Host access-sw1
+    HostName 10.10.10.11
+    User admin
+    HostKeyAlgorithms +ssh-rsa
+    PubkeyAcceptedAlgorithms +ssh-rsa
+    KexAlgorithms +diffie-hellman-group14-sha1
+
+Host access-sw2
+    HostName 10.10.10.12
+    User admin
+    HostKeyAlgorithms +ssh-rsa
+    PubkeyAcceptedAlgorithms +ssh-rsa
+    KexAlgorithms +diffie-hellman-group14-sha1

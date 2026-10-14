@@ -1,0 +1,27 @@
+# Live exports from real devices: never commit
+live-configs/
+*.running
+*-running-config*
+*.startup
+show-run*.txt
+show-tech*.txt
+
+# Backups and bundles that contain device identity or secrets
+*.tgz
+configBundle-*
+*.vbk
+*.vib
+
+# Local secrets
+.env
+*.key
+*.pem
+secrets*
+passwords*
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
