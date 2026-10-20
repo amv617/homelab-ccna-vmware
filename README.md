@@ -64,6 +64,8 @@ A more detailed version is in [`diagrams/topology.mmd`](diagrams/topology.mmd).
 | ESXI-01 BMC | dedicated IPMI port | 10.10.10.30 |
 | ESXI-03 BMC (planned) | dedicated IPMI port | 10.10.10.31 |
 | veeam01 | VLAN 10 | 10.10.10.40 |
+| TS-ROUTER (Tailscale subnet router) | VLAN 10 | 10.10.10.41 |
+| RANCID-01 (config backups) | VLAN 10 | 10.10.10.42 |
 | Service laptop | Gi1/0/22 on either access switch | 10.10.10.50 (static, temporary) |
 | ESXI-01 | vmk1 (VLAN 30) | 10.10.30.21 |
 | NAS-01 | LAN | 10.10.30.10 |
@@ -82,7 +84,7 @@ A more detailed version is in [`diagrams/topology.mmd`](diagrams/topology.mmd).
 | ACCESS-SW1/2 | Gi1/0/22 | Service laptop | Access VLAN 10 |
 | All | All other ports | none | Shutdown, VLAN 999 |
 
-Planned for the second host (ESXI-03): ACCESS-SW1 Gi1/0/3 (vmnic0) and ACCESS-SW2 Gi1/0/3 (vmnic1) as trunks like Gi1/0/1, and its IPMI on ACCESS-SW1 Gi1/0/2. These ports are still shut in the committed configs; see [docs/07-vsphere-ha-cluster.md](docs/07-vsphere-ha-cluster.md#planned-switch-ports-for-esxi-03).
+Planned for the second host (ESXI-03): ACCESS-SW1 Gi1/0/3 (vmnic0) and ACCESS-SW2 Gi1/0/3 (vmnic1) as trunks like Gi1/0/1, and its IPMI on ACCESS-SW1 Gi1/0/2. These ports are still shut in the committed configs; see [docs/07-vsphere-ha-cluster.md](docs/08-vsphere-ha-cluster.md#planned-switch-ports-for-esxi-03).
 
 ## Design highlights
 
@@ -93,7 +95,9 @@ Planned for the second host (ESXI-03): ACCESS-SW1 Gi1/0/3 (vmnic0) and ACCESS-SW
 - **Host NIC redundancy without LACP.** The ESXi host's two NICs land on different, unstacked access switches, so vSwitch0 uses "Route based on originating virtual port" teaming rather than an EtherChannel.
 - **Out-of-band access.** The BMC sits on its own dedicated port in VLAN 10, so the iKVM console survives a host network misconfiguration.
 - **Three-layer backups.** vCenter file-based backup, ESXi config bundles, and Veeam Community Edition VM backups, each to its own least-privilege SMB share on the NAS.
-- **vSphere HA cluster.** Two-host Lab-Cluster with EVC, shared NFS 3 storage over the storage VLAN, vMotion on the management VMkernel, and failure testing by hard power-off through IPMI. A nested ESXi host stands in for the second server until it arrives.
+- **vSphere HA cluster.** Two-host Lab-Cluster (ESXI-01 plus a nested ESXi host standing in for the second server) with shared NFS 3 storage over the storage VLAN, vMotion on the management VMkernel, per-VM EVC, DRS-driven maintenance mode, and tested host-failure and isolation responses.
+- **Remote access without open ports.** A Tailscale subnet router VM advertises 10.10.0.0/16 and source-NATs remote traffic onto the management VLAN, so the switch ACLs and home router stay unchanged and nothing faces the internet.
+- **Config change tracking.** RANCID collects all three switches hourly over SSH with a dedicated least-privilege account and commits only real changes to a git history, giving a diff of every change and a restorable last-good config.
 
 ## Build order
 
@@ -104,8 +108,11 @@ Planned for the second host (ESXI-03): ACCESS-SW1 Gi1/0/3 (vmnic0) and ACCESS-SW
 5. [ACCESS-SW2](docs/04-access-switches.md), config: [`configs/access-sw2.cfg`](configs/access-sw2.cfg)
 6. [ESXI-01 re-IP, IPMI and vCenter prep](docs/05-esxi-01-reip-vcenter-prep.md)
 7. [NAS-01 backup target](docs/06-nas-backup.md)
-8. [vSphere HA cluster](docs/07-vsphere-ha-cluster.md): second host, NFS datastore, vMotion, HA
-9. [Nested HA member ESXI-N1](docs/08-nested-ha-esxi-n1.md): practice the cluster before the second host arrives
+8. [Nested HA member ESXI-N1](docs/07-nested-ha-esxi-n1.md): a nested second host to build the cluster with
+9. [vSphere HA cluster](docs/08-vsphere-ha-cluster.md): NFS datastore, vMotion, HA, DRS, failure tests
+10. [Ubuntu 26.04.1 VM build](docs/09-ubuntu-vm-build.md): TS-ROUTER and RANCID-01 on shared storage
+11. [Tailscale remote access](docs/10-tailscale-remote-access.md): reach the lab from anywhere
+12. [RANCID config backups](docs/11-rancid-config-backups.md): hourly switch config history in git
 
 ## Repository layout
 
@@ -120,7 +127,8 @@ scripts/            Pre-commit secret scan
 
 ## Security notes
 
-- Every credential in this repo is a placeholder (`<enable-password>`, `<admin-password>`). No password hashes, RSA keys, MAC addresses, serial numbers, or router credentials are committed.
+- Every credential in this repo is a placeholder (`<enable-password>`, `<admin-password>`, `<rancid-password>`). No password hashes, RSA keys, MAC addresses, serial numbers, Tailscale keys or machine names, or router credentials are committed.
+- RANCID's output (`/var/lib/rancid`, its `.cloginrc`, and any `git bundle` of its history) contains password hashes and serial numbers. It stays on RANCID-01 and is blocked by `.gitignore`.
 - All addresses are RFC 1918 private ranges.
 - If you export a live `show running-config`, put it in `live-configs/` (git-ignored) and run [`scripts/check-secrets.sh`](scripts/check-secrets.sh) before committing anything derived from it.
 

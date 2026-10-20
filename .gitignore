@@ -25,3 +25,15 @@ Thumbs.db
 *.swp
 .vscode/
 .idea/
+
+# RANCID output and credentials (hashes, serials, plain-text switch passwords)
+.cloginrc
+*.cloginrc
+router.db
+rancid/
+rancid-lab*/
+*.bundle
+
+# Tailscale state and keys
+tailscaled.state
+*.tskey

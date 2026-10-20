@@ -35,6 +35,11 @@ check "Certificate chain"          'certificate (self-signed|ca) [0-9A-F]+'
 # SNMP and other shared secrets
 check "SNMP community"             'snmp-server community [^<[:space:]]+'
 check "Key string"                 'key-string [^<[:space:]]+'
+# RANCID .cloginrc passwords (placeholders in <...> are allowed)
+check "cloginrc password"          'add password [^ ]+ \{[^<}]'
+# Tailscale auth keys and one-time login links
+check "Tailscale auth key"         'tskey-[A-Za-z0-9-]{8,}'
+check "Tailscale login link"       'login\.tailscale\.com/a/[A-Za-z0-9]+'
 
 if [ "$found" -eq 0 ]; then
   echo "No secrets or device identifiers found."

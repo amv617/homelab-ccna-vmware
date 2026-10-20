@@ -44,6 +44,16 @@ The NAS sits directly on CORE-SW1 so storage traffic from either ESXi uplink is 
 
 - vCenter installs most cleanly with working forward and reverse DNS. Either run lab DNS or use the appliance IP as its system name.
 
+## Lab service VMs (VLAN 10)
+
+All on the MGMT-VLAN10 port group, gateway 10.10.10.1:
+
+| VM | Address | DNS | Job |
+|---|---|---|---|
+| veeam01 | 10.10.10.40 | 192.168.1.1 | Veeam backups ([06-nas-backup.md](06-nas-backup.md)) |
+| TS-ROUTER | 10.10.10.41 | 192.168.1.1, 1.1.1.1 | Tailscale subnet router ([10-tailscale-remote-access.md](10-tailscale-remote-access.md)) |
+| RANCID-01 | 10.10.10.42 | 192.168.1.1, 1.1.1.1 | Switch config backups ([11-rancid-config-backups.md](11-rancid-config-backups.md)) |
+
 ## DNS
 
 Lab devices use 192.168.1.1 for DNS, reached through CORE-SW1. The switches run `no ip domain-lookup` and need no DNS server.

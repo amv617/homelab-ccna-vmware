@@ -25,7 +25,7 @@ The VM datastore spans two NVMe drives with no redundancy, so these backups are 
 | `vm-backup` | R/W: `svc-veeam` only | |
 | `svc-vcenter`, `svc-veeam` | Standard users, not admins | One account per tool |
 
-The HA cluster later adds a fourth share, `vm-shared`, exported over NFS to the hosts' VLAN 30 addresses only; see [07-vsphere-ha-cluster.md](07-vsphere-ha-cluster.md#part-3-shared-nfs-storage).
+The HA cluster later adds a fourth share, `vm-shared`, exported over NFS to the hosts' VLAN 30 addresses only; see [08-vsphere-ha-cluster.md](08-vsphere-ha-cluster.md#part-3-shared-nfs-storage).
 
 All backup traffic originates in VLAN 10 and is routed by CORE-SW1 to VLAN 30. Because the NAS's gateway is also CORE-SW1, replies take the same path back and never cross the home router.
 
