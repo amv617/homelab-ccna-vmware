@@ -95,11 +95,11 @@ Same build as TS-ROUTER and RANCID-01 ([09-ubuntu-vm-build.md](09-ubuntu-vm-buil
 | Network | **VM-NET (VLAN 20), DHCP** | No static address to clean out; clones use DHCP too |
 | Per-VM EVC | Intel Haswell Generation | Clones inherit it so they can vMotion between hosts |
 
-- **7a.** The Ubuntu ISO should already be in vmstore > ISO from the TS-ROUTER build. vmstore is ESXI-01's local datastore, which is why the template is built on 10.10.10.21.
-- **7b.** Right-click 10.10.10.21 > New Virtual Machine: location Lab-DC, storage nfs-vm-shared, ESXi 8.0 and later, Ubuntu Linux (64-bit), 1 CPU / 2 GB / 20 GB thin, VMware Paravirtual, **VM-NET** with VMXNET 3, CD/DVD from vmstore > ISO. Finish without powering on.
+- **7a.** The Ubuntu ISO should already be in Storage > vmstore > Files > ISO from the TS-ROUTER build. If not, open https://10.10.10.21 once to accept its certificate, then use Upload Files in that folder. vmstore is ESXI-01's local datastore, so only 10.10.10.21 can boot from it, which is why the template is built there.
+- **7b.** Right-click 10.10.10.21 > New Virtual Machine: location Lab-DC itself (not the Discovered virtual machine or vCLS folders), storage nfs-vm-shared with the Datastore Default policy, ESXi 8.0 and later, Ubuntu Linux (64-bit), 1 CPU / 2 GB / 20 GB thin, VMware Paravirtual, **VM-NET** with VMXNET 3, CD/DVD from vmstore > ISO. Finish without powering on.
 - **7c.** Configure > VMware EVC > **Intel Haswell Generation** (only while powered off), then power on.
-- **7d. Install Ubuntu** as in the build guide, with these differences: on the network screen **ens192 should already show DHCPv4 10.10.20.x/24; change nothing** (if it says autoconfiguration failed, the VM isn't on VM-NET); server name **ubuntu-tmpl**; the same admin username on every clone; OpenSSH server on; storage LVM without encryption (a template that asks for a passphrase can't boot its clones unattended).
-- **7e.** Set CD/DVD to **Client Device**, log in once, `ip -br a` for the 10.10.20.x address, then SSH in.
+- **7d. Install Ubuntu** as in the build guide, with these differences: on the network screen **ens192 should already show DHCPv4 10.10.20.x/24; change nothing** (if it says autoconfiguration failed, the VM isn't on VM-NET); server name **ubuntu-tmpl**; username **labadmin** (every clone inherits this account); OpenSSH server on; storage LVM without encryption (a template that asks for a passphrase can't boot its clones unattended).
+- **7e.** Set CD/DVD to **Client Device** (so clones don't point at the ISO), log in once, run `ip -br a` and note the 10.10.20.x address on ens192, then `ssh labadmin@<address>`.
 - **7f. Baseline:**
 
 ```bash
@@ -134,7 +134,9 @@ history -c && sudo shutdown -h now
 | `rm` netplan files | Removes the template's own network file, so a clone only gets what customization writes |
 | `cloud-init clean` | Next boot counts as a first boot, so each clone gets fresh SSH host keys |
 | `truncate machine-id` | Each clone generates its own machine ID, so DHCP doesn't hand two clones the same address |
-| `shutdown` | A template must be powered off |
+| `shutdown` | A template must be powered off; the SSH session drops |
+
+The `tee` line prints the setting back once, which means the file was written. To double-check, run `cat /etc/cloud/cloud.cfg.d/99-vmware-customization.cfg` before the shutdown line.
 
 ### Step 9: Convert it to a template
 
@@ -144,7 +146,32 @@ To update it later: Convert to Virtual Machine, power on, patch, rerun Step 8, c
 
 ## Part 4: The Terraform files
 
-The files are in [`terraform-lab/`](../terraform-lab/): `versions.tf`, `provider.tf`, `variables.tf`, `main.tf`, `outputs.tf`, `.gitignore`, and `terraform.tfvars.example`.
+The files are in [`terraform-lab/`](../terraform-lab/): `versions.tf`, `provider.tf`, `variables.tf`, `main.tf`, `outputs.tf`, `.gitignore`, and `terraform.tfvars.example`. Terraform reads every `.tf` file in the folder it runs from.
+
+### Step 10: Set up the project folder
+
+If you cloned this repo, the folder is already there: `cd homelab-ccna-vmware/terraform-lab`. To build it by hand instead, create the folder inside your clone and make the empty files from the command line, so the names are exactly right:
+
+```bash
+# macOS
+mkdir -p ~/homelab-ccna-vmware/terraform-lab && cd ~/homelab-ccna-vmware/terraform-lab
+touch .gitignore versions.tf provider.tf variables.tf main.tf outputs.tf terraform.tfvars
+ls -a
+```
+
+```powershell
+# Windows
+mkdir $HOME\homelab-ccna-vmware\terraform-lab; cd $HOME\homelab-ccna-vmware\terraform-lab
+New-Item -ItemType File .gitignore, versions.tf, provider.tf
+New-Item -ItemType File variables.tf, main.tf, outputs.tf, terraform.tfvars
+Get-ChildItem -Force -Name
+```
+
+Creating files this way avoids the most common mistake: Notepad or TextEdit saving `main.tf.txt`, which Terraform silently ignores. Open the folder with `code .` (on the Mac, if `code` isn't found, run *Shell Command: Install 'code' command in PATH* from VS Code's Cmd+Shift+P). Fill in `.gitignore` first, so the password file is never picked up by Git.
+
+> **Copying from a PDF** can run lines together or turn straight quotes into curly ones. Indentation doesn't matter (`terraform fmt` fixes it), but every line must be on its own line and every quote must be straight. Copying from the files in this repo avoids the problem.
+
+Then run `terraform fmt`: a list of file names or no output is fine; an error with a file and line number means a typo, usually a missing brace or quote.
 
 | Block | What it does |
 |---|---|
@@ -170,6 +197,10 @@ terraform plan                       # read the last line: "Plan: 2 to add, 0 to
 terraform apply                      # type yes
 ```
 
+Apply prints the plan again and waits at `Enter a value:`. Only `yes` (lowercase, the whole word) approves; `y` or `Yes` cancels with *Apply cancelled* and changes nothing, so it's your last chance to check the Plan line.
+
+> **Windows 11: Application Control policy error.** If validate or plan fails with *Failed to load plugin schemas ... An Application Control policy has blocked this file*, Smart App Control is blocking the provider `.exe` that init downloaded (Terraform itself runs because Windows recognizes it). The simplest fix is to run Terraform from the Mac. Turning Smart App Control off (Windows Security > App & browser control) also works, but on most Windows 11 versions it can only be turned back on by resetting Windows.
+
 In plan output, `+` is create, `~` change in place, `-` destroy and `-/+` destroy and recreate. During apply, vCenter shows Clone virtual machine, Customize virtual machine and Power On for each VM; Terraform waits until each reports an IP through VMware Tools, then prints `vm_ip_addresses` (addresses from CORE-SW1's VLAN 20 pool).
 
 **Step 14: Check the result.**
@@ -178,7 +209,7 @@ In plan output, `+` is create, `~` change in place, `-` destroy and `-/+` destro
 |---|---|---|
 | 1 | Lab-Cluster > VMs | lab-web01 and lab-web02 powered on, on nfs-vm-shared (DRS may split them across hosts) |
 | 2 | Each VM > Summary | DNS name `lab-web01.lab.local`, VMware Tools Running, the IP from the output |
-| 3 | `ssh <admin-user>@<IP>` | Prompt shows the clone's name, not ubuntu-tmpl |
+| 3 | `ssh labadmin@<IP>` | Prompt shows the clone's name, not ubuntu-tmpl |
 | 4 | Each VM > Configure > VMware EVC | Intel Haswell inherited from the template |
 | 5 | Lab-Cluster > Monitor > vSphere HA | Both VMs protected |
 | 6 | `terraform state list` | The five data sources and two VM resources |
@@ -228,10 +259,11 @@ default = {
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | init: provider moved to vmware/vsphere | Old example uses hashicorp/vsphere | `source = "vmware/vsphere"`, then `terraform init -upgrade` |
+| Windows: Failed to load plugin schemas ... Application Control policy has blocked this file | Smart App Control blocks the provider .exe | Run Terraform from the Mac (Part 5 note) |
 | Cannot complete login: incorrect user name or password | Wrong user format or password | User must be `svc-terraform@vsphere.local` |
 | datacenter 'Lab-DC' not found | No read-only permission at the vCenter root, or a typo | Step 6, item 2; names are case-sensitive |
 | Permission to perform this operation was denied | Privilege missing from the role | The error names it; add it to the role |
-| ubuntu-2604-tmpl not found | Name differs, or it's still a VM | Check VMs and Templates; Step 9 |
+| vm 'ubuntu-2604-tmpl' not found | Template not built yet, the name differs, or it sits in a folder under Lab-DC | Check VMs and Templates: finish Step 9, match the name, and move it onto Lab-DC or use the folder path in `main.tf` (`Folder/ubuntu-2604-tmpl`) |
 | Apply times out waiting for an IP | Customization failed, or no DHCP on VM-NET | Check the console hostname and `ip -br a`; recheck Step 8 lines 3 to 5; check CORE-SW1's VLAN 20 pool |
 | Clone keeps hostname ubuntu-tmpl | cloud-init ignored vSphere customization | Recheck the `99-vmware-customization.cfg` and `cloud-init clean`, reconvert the template |
 | Two clones get the same IP | Template machine-id not cleared | Run the truncate line, reconvert, destroy and re-apply |
