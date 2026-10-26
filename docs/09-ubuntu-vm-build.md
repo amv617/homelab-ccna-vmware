@@ -36,11 +36,15 @@ shasum -a 256 ~/Downloads/ubuntu-26.04.1-live-server-amd64.iso                  
 Get-FileHash $HOME\Downloads\ubuntu-26.04.1-live-server-amd64.iso -Algorithm SHA256  # Windows
 ```
 
-## Step 2: Upload it to nfs-vm-shared
+## Step 2: Upload it to vmstore
+
+Skip this if vmstore > ISO already holds `ubuntu-26.04.1-live-server-amd64.iso`.
 
 1. Use the service port (10.10.10.50) or a workstation with the 10.10.0.0/16 route.
-2. Open https://10.10.10.21 and https://10.10.10.24 and accept each certificate first; uploads go straight to a host and fail quietly if the browser hasn't accepted its certificate.
-3. In vCenter, nfs-vm-shared > Files > ISO folder (create it if needed) > Upload Files.
+2. Open https://10.10.10.21 and accept its certificate first. vmstore is ESXI-01's local datastore, so the upload goes straight to that host and fails quietly if the browser hasn't accepted its certificate.
+3. In vCenter, vmstore > Files > ISO folder (create it if needed) > Upload Files.
+
+Only 10.10.10.21 can read vmstore, which is one reason Step 3 builds the VM on that host. The ISO is only needed for the install: Step 5 disconnects it, and after that the VM can run on or move to either host. **Until then, don't migrate the VM to 10.10.10.24.**
 
 **Before you build:** nfs-vm-shared is mounted on every host, MGMT-VLAN10 exists on every host with exactly that name, and pings to 10.10.10.41 and .42 time out (nothing else has the address).
 
@@ -59,7 +63,7 @@ Right-click **10.10.10.21** (the host, not the cluster, so DRS doesn't place it)
 | Hard disk | 20 GB, Thin Provision |
 | SCSI controller | VMware Paravirtual (default) |
 | Network | MGMT-VLAN10, VMXNET 3, Connect At Power On |
-| CD/DVD | Datastore ISO File > nfs-vm-shared > ISO > the Ubuntu ISO, Connect At Power On |
+| CD/DVD | Datastore ISO File > **vmstore** > ISO > the Ubuntu ISO, Connect At Power On (only 10.10.10.21 sees vmstore) |
 
 Finish **without** powering on.
 
@@ -94,7 +98,7 @@ The installer is text-based (arrows/Tab to move, Space to tick, Enter to choose)
 
 ## Step 5: First boot
 
-1. In vCenter, change CD/DVD drive 1 to **Client Device** so the ISO is fully disconnected (otherwise HA and vMotion can trip over it).
+1. In vCenter, change CD/DVD drive 1 to **Client Device** so the ISO is fully disconnected. The ISO is on ESXI-01's local vmstore, so until this is done the VM can't move to or restart on 10.10.10.24.
 2. Log in once on the web console and run `ip -br a`: ens192 should be UP with the VM's address.
 3. From now on, work over SSH from the laptop: `ssh labadmin@10.10.10.41` (or .42). Type `yes` the first time.
 
@@ -189,6 +193,6 @@ Then repeat Steps 3 to 7 for the other VM (the ISO is already uploaded).
 | Moved to .24, no network | Wrong VLAN there, or NESTED-TRUNK not Accept | VLAN 10; NESTED-TRUNK security all Accept |
 | Migrate fails: CPU incompatible | No per-VM EVC | Power off, set Haswell (3b), power on |
 | VT-x / VHV disabled error | ESXI-N1 VM lacks hardware-assisted virtualization | Maintenance mode on .24, shut down ESXI-N1, tick it, power on |
-| Migration fails on the CD/DVD | CD points at an ISO the other host can't see | Client Device (Step 5) |
+| Migration fails on the CD/DVD | CD still points at the ISO on vmstore, which 10.10.10.24 can't see | Client Device (Step 5) |
 | VM listed as unprotected | Not on nfs-vm-shared, or HA not configured on a host | Check Storage on the Summary; check Monitor > vSphere HA |
 | Both VMs off after a power cut | Hosts booted before NAS-01 | Wait for the datastore, then power them on |

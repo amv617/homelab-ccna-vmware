@@ -40,6 +40,8 @@ check "cloginrc password"          'add password [^ ]+ \{[^<}]'
 # Tailscale auth keys and one-time login links
 check "Tailscale auth key"         'tskey-[A-Za-z0-9-]{8,}'
 check "Tailscale login link"       'login\.tailscale\.com/a/[A-Za-z0-9]+'
+# Terraform vCenter password (placeholders in <...> are allowed)
+check "Terraform password"         'vsphere_password[[:space:]]*=[[:space:]]*"[^<"]'
 
 if [ "$found" -eq 0 ]; then
   echo "No secrets or device identifiers found."

@@ -63,12 +63,13 @@ A more detailed version is in [`diagrams/topology.mmd`](diagrams/topology.mmd).
 | ESXI-N1 (nested) | vmk0 / vmk1 | 10.10.10.24 / 10.10.30.24 |
 | ESXI-01 BMC | dedicated IPMI port | 10.10.10.30 |
 | ESXI-03 BMC (planned) | dedicated IPMI port | 10.10.10.31 |
-| veeam01 | VLAN 10 | 10.10.10.40 |
+| veeam01 (on ESXI-01's local vmstore) | VLAN 10 | 10.10.10.40 |
 | TS-ROUTER (Tailscale subnet router) | VLAN 10 | 10.10.10.41 |
 | RANCID-01 (config backups) | VLAN 10 | 10.10.10.42 |
 | Service laptop | Gi1/0/22 on either access switch | 10.10.10.50 (static, temporary) |
 | ESXI-01 | vmk1 (VLAN 30) | 10.10.30.21 |
 | NAS-01 | LAN | 10.10.30.10 |
+| ubuntu-2604-tmpl and lab-web VMs (Terraform) | VM-NET (VLAN 20) | DHCP from CORE-SW1 |
 
 ## Port map
 
@@ -84,7 +85,7 @@ A more detailed version is in [`diagrams/topology.mmd`](diagrams/topology.mmd).
 | ACCESS-SW1/2 | Gi1/0/22 | Service laptop | Access VLAN 10 |
 | All | All other ports | none | Shutdown, VLAN 999 |
 
-Planned for the second host (ESXI-03): ACCESS-SW1 Gi1/0/3 (vmnic0) and ACCESS-SW2 Gi1/0/3 (vmnic1) as trunks like Gi1/0/1, and its IPMI on ACCESS-SW1 Gi1/0/2. These ports are still shut in the committed configs; see [docs/07-vsphere-ha-cluster.md](docs/08-vsphere-ha-cluster.md#planned-switch-ports-for-esxi-03).
+Planned for the second host (ESXI-03): ACCESS-SW1 Gi1/0/3 (vmnic0) and ACCESS-SW2 Gi1/0/3 (vmnic1) as trunks like Gi1/0/1, and its IPMI on ACCESS-SW1 Gi1/0/2. These ports are still shut in the committed configs; see [docs/08-vsphere-ha-cluster.md](docs/08-vsphere-ha-cluster.md#planned-switch-ports-for-esxi-03).
 
 ## Design highlights
 
@@ -98,6 +99,7 @@ Planned for the second host (ESXI-03): ACCESS-SW1 Gi1/0/3 (vmnic0) and ACCESS-SW
 - **vSphere HA cluster.** Two-host Lab-Cluster (ESXI-01 plus a nested ESXi host standing in for the second server) with shared NFS 3 storage over the storage VLAN, vMotion on the management VMkernel, per-VM EVC, DRS-driven maintenance mode, and tested host-failure and isolation responses.
 - **Remote access without open ports.** A Tailscale subnet router VM advertises 10.10.0.0/16 and source-NATs remote traffic onto the management VLAN, so the switch ACLs and home router stay unchanged and nothing faces the internet.
 - **Config change tracking.** RANCID collects all three switches hourly over SSH with a dedicated least-privilege account and commits only real changes to a git history, giving a diff of every change and a restorable last-good config.
+- **Infrastructure as code.** Terraform clones lab VMs from an Ubuntu template through vCenter with a least-privilege service account, so VMs are created, resized and destroyed from version-controlled files.
 
 ## Build order
 
@@ -113,6 +115,7 @@ Planned for the second host (ESXI-03): ACCESS-SW1 Gi1/0/3 (vmnic0) and ACCESS-SW
 10. [Ubuntu 26.04.1 VM build](docs/09-ubuntu-vm-build.md): TS-ROUTER and RANCID-01 on shared storage
 11. [Tailscale remote access](docs/10-tailscale-remote-access.md): reach the lab from anywhere
 12. [RANCID config backups](docs/11-rancid-config-backups.md): hourly switch config history in git
+13. [Terraform for vSphere](docs/12-terraform-vsphere.md), code: [`terraform-lab/`](terraform-lab/): VMs from code
 
 ## Repository layout
 
@@ -123,12 +126,14 @@ docs/               Build guides in Markdown
 diagrams/           Mermaid topology source
 ssh/                OpenSSH client config for IOS host keys
 scripts/            Pre-commit secret scan
+terraform-lab/      Terraform files that clone lab VMs through vCenter
 ```
 
 ## Security notes
 
 - Every credential in this repo is a placeholder (`<enable-password>`, `<admin-password>`, `<rancid-password>`). No password hashes, RSA keys, MAC addresses, serial numbers, Tailscale keys or machine names, or router credentials are committed.
 - RANCID's output (`/var/lib/rancid`, its `.cloginrc`, and any `git bundle` of its history) contains password hashes and serial numbers. It stays on RANCID-01 and is blocked by `.gitignore`.
+- Terraform's `terraform.tfvars` (the svc-terraform password), `*.tfstate` and `.terraform/` are git-ignored; only `terraform.tfvars.example` with a placeholder is committed.
 - All addresses are RFC 1918 private ranges.
 - If you export a live `show running-config`, put it in `live-configs/` (git-ignored) and run [`scripts/check-secrets.sh`](scripts/check-secrets.sh) before committing anything derived from it.
 

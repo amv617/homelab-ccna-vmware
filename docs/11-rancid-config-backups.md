@@ -37,10 +37,20 @@ Uptime, counters and clock lines are filtered out, so an unchanged switch doesn'
 
 ## Before you start
 
-- RANCID-01 has passed the build guide checklist.
+- RANCID-01 has passed the build guide checklist, including the time zone: `timedatectl` should say America/New_York. If it says UTC, RANCID's logs and change history are stamped in UTC.
 - From RANCID-01, `ping -c 2` 10.10.10.1, .11 and .12 all reply.
 - You can SSH to each switch as admin and know the enable secret.
-- Pick a password for the new rancid switch account (letters, numbers and hyphens are easiest).
+- Pick a new password for the rancid switch account (see below).
+
+### Three passwords, three jobs
+
+| Password | What it is | Where it's used |
+|---|---|---|
+| Admin account on RANCID-01 | The Ubuntu login created when the VM was built | SSH to RANCID-01 and `sudo`. Never on the switches |
+| **rancid** (new) | A brand-new password for a new switch account called `rancid` | Step 1 on all three switches; first password in `.cloginrc` (Step 9) |
+| Enable secret | The switches' existing enable secret | Second password in `.cloginrc` (Step 9). Don't change it |
+
+**Choosing the rancid password:** use the **same one on all three switches**, because `.cloginrc` has a single password line for them. Make it different from the admin, enable and Ubuntu passwords so the account can be rotated or removed on its own. Stick to **letters, numbers and hyphens**: IOS treats `?` as a help request and won't store it, and spaces or braces complicate `.cloginrc`. Write it down; Step 9 needs it again.
 
 ## Part 1: Prepare the switches
 
@@ -56,11 +66,13 @@ copy running-config startup-config
 show running-config | include username
 ```
 
-Look for a `username rancid privilege 15 secret ...` line (the hash type, 5, 8 or 9, depends on the IOS). A separate account means switch logs show which logins were RANCID's, and the password stored on RANCID-01 isn't your admin password. Privilege 15 is required for `show running-config`. **No ACL change:** MGMT-SSH already permits 10.10.10.0/24.
+Replace `<rancid-password>` with the new rancid password (not the Ubuntu password), identically on all three switches. Look for a `username rancid privilege 15 secret ...` line (the hash type, 5, 8 or 9, depends on the IOS). A separate account means switch logs show which logins were RANCID's, and the password stored on RANCID-01 isn't your admin password. Privilege 15 is required for `show running-config`. **No ACL change:** MGMT-SSH already permits 10.10.10.0/24.
 
 ## Part 2: Set up RANCID on RANCID-01
 
 `ssh labadmin@10.10.10.42`. Steps 2 to 5 run as your admin account with sudo.
+
+Multi-line command blocks can be pasted at once or run a line at a time (one at a time is easier to read). The exception is a block that starts with `cat > ... <<'EOF'` and ends with `EOF`: it writes a file, so paste everything from `cat` through `EOF` in one go.
 
 ### Step 2: Install RANCID and git
 
@@ -144,6 +156,8 @@ EOF
 
 ### Step 9: Store the switch login in .cloginrc
 
+**Before pasting**, replace the two placeholders on the `add password` line: the first with the rancid password from Step 1, the second with the enable secret. Keep the braces `{ }` and delete only the placeholder text between them. The Ubuntu password doesn't go in this file.
+
 ```bash
 cat > ~/.cloginrc <<'EOF'
 add user *-sw* rancid
@@ -163,7 +177,19 @@ ls -l ~/.cloginrc        # -rw------- rancid rancid
 | `add autoenable 1` | The account starts at privilege 15, so skip `enable` |
 | `add method ssh` | SSH only; the switches don't allow Telnet |
 
-> **This file holds switch passwords in plain text.** Mode 600 means only rancid can read it. Keep the braces around each password so characters like `$` or spaces work; a literal brace needs a backslash (`{abc\}123}`). Never copy `.cloginrc` off RANCID-01 or into this repo.
+**Pasted it with the placeholders still in?** Fix it before the Step 10 test or clogin fails with *Check your passwd*: as rancid, `nano ~/.cloginrc`, replace the placeholders (keep the braces), save with Ctrl+O, Enter, exit with Ctrl+X. nano keeps the 600 permissions; `ls -l ~/.cloginrc` should still start with `-rw-------`.
+
+> **This file holds switch passwords in plain text.** Mode 600 means only rancid can read it. Never copy `.cloginrc` off RANCID-01 or into this repo.
+
+**Quoting rules.** Braces let a password contain spaces, `$`, `[ ]` and `;` safely. A password containing `{` or `}` can't go in braces (the `}` ends it early and clogin reports *extra characters after close-brace*). For that password only, use double quotes and put a backslash before any `$ [ ] " \` inside it; braces and semicolons need no backslash inside quotes. Made-up examples:
+
+| Password | Write it in `.cloginrc` as |
+|---|---|
+| `Abc-Lab-123` | `{Abc-Lab-123}` (braces, the normal case) |
+| `ab}c;9` | `"ab}c;9"` (quotes, because of the brace) |
+| `x{y$1` | `"x{y\$1"` (quotes, backslash before the `$`) |
+
+Simplest of all: letters, numbers and hyphens only, in braces.
 
 ### Step 10: Allow IOS 15's SSH algorithms, then test one login
 
@@ -185,9 +211,10 @@ Look for the `CORE-SW1#` prompt and the time; clogin types the password from `.c
 
 | clogin prints | Cause | Fix |
 |---|---|---|
+| extra characters after close-brace | A password contains `}` inside braces | Write that password in double quotes (Step 9) |
 | no matching key exchange method | Older KEX not allowed | Check KexAlgorithms in `~/.ssh/config` |
 | no matching host key type | ssh-rsa not allowed | Check HostKeyAlgorithms |
-| Error: Check your passwd | Wrong user or password | Fix `.cloginrc`; test `ssh rancid@core-sw1` by hand |
+| Error: Check your passwd | Wrong user or password, or placeholders left in | Fix `.cloginrc` (placeholders replaced, braces kept); test `ssh rancid@core-sw1` by hand |
 | Connection timed out | No path, or ACL | `ping core-sw1`; check MGMT-SSH |
 | Connection Refused (ssh) | SSH not running on the switch | Check `ip ssh` (switch guide, Step 10) |
 
@@ -202,7 +229,7 @@ cd ~/lab && git log --oneline | head -5
 exit
 ```
 
-A `/usr/sbin/sendmail: not found` line only means there's no mail relay for change reports; the history still saves. Each config file starts with RANCID's `!` header lines (chassis, memory, image), then flash, VLANs and the running config.
+A `/usr/sbin/sendmail: not found` line only means there's no mail relay for change reports; the history still saves. On later runs with no switch changes, the log ends with *nothing to commit, working tree clean* and *Everything up-to-date* after *All routers successfully completed*: RANCID only saves when something changed, and the sendmail line appears only on runs that try to send a report. If the start and end times say UTC, set RANCID-01's time zone (build guide 6c). Each config file starts with RANCID's `!` header lines (chassis, memory, image), then flash, VLANs and the running config.
 
 ### Step 12: Run it every hour
 

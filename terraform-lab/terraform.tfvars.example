@@ -1,0 +1,4 @@
+# Copy to terraform.tfvars (git-ignored) and fill in. Never commit the real file.
+# Or skip the file and set TF_VAR_vsphere_password in your shell instead.
+vsphere_user     = "svc-terraform@vsphere.local"
+vsphere_password = "<svc-terraform-password>"

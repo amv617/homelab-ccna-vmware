@@ -37,3 +37,12 @@ rancid-lab*/
 # Tailscale state and keys
 tailscaled.state
 *.tskey
+
+# Terraform state, provider cache and variable files (passwords)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
